@@ -35,9 +35,11 @@ class States(Enum):
     AWAITING_SUMMARY_APPROVAL = 7
     GETTING_SKILLS = 8
     GETTING_EXPERIENCE = 9
-    AWAITING_EXPERIENCE_APPROVAL = 10
-    GETTING_EDUCATION = 11
-    GENERATING_PDF = 12
+    GETTING_EDUCATION = 10
+    ASKING_TAILOR = 11
+    GETTING_JOB_DESCRIPTION = 12
+    AWAITING_TAILOR_APPROVAL = 13
+    GENERATING_PDF = 14
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -254,79 +256,30 @@ async def skills_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
 
 async def get_experience(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores an experience, gets AI enhancement, and asks for approval."""
-    original_experience = update.message.text
-    context.user_data["experience"].append(original_experience) # Add original for now
-
-    await update.message.reply_text("Using AI to enhance this entry...")
-
-    # For simplicity, we assume the description is the last part after a comma
-    parts = [p.strip() for p in original_experience.split(',')]
-    description = parts[-1] if len(parts) > 1 else original_experience
-
-    enhanced_description_list = gemini_client.enhance_experience([description])
-
-    if enhanced_description_list:
-        enhanced_description = enhanced_description_list[0]
-        # Store for approval
-        context.user_data["pending_experience"] = original_experience
-        context.user_data["enhanced_experience_desc"] = enhanced_description
-
-        keyboard = [
-            [InlineKeyboardButton("✅ Use AI Version", callback_data="use_ai_exp")],
-            [InlineKeyboardButton("✍️ Keep My Version", callback_data="use_original_exp")],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await update.message.reply_text(
-            "Here is an AI-enhanced description for this role:\n\n"
-            f"**AI Version:**\n_{enhanced_description}_\n\n"
-            "Would you like to use the AI version for the description?",
-            reply_markup=reply_markup,
-            parse_mode="Markdown"
-        )
-        return States.AWAITING_EXPERIENCE_APPROVAL
-    else:
-        # AI enhancement failed, just use the original and ask for the next one
-        await update.message.reply_text("AI enhancement failed. Sticking with your version. Enter another one, or click 'Done'.")
-        return States.GETTING_EXPERIENCE
-
-
-async def handle_experience_approval(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handles the user's choice for the experience description."""
-    query = update.callback_query
-    await query.answer()
-
-    original_experience = context.user_data.pop("pending_experience")
-    parts = [p.strip() for p in original_experience.split(',')]
-
-    if query.data == "use_ai_exp":
-        enhanced_desc = context.user_data.pop("enhanced_experience_desc")
-        # Replace the old description with the new one
-        if len(parts) > 1:
-            parts[-1] = enhanced_desc
-            final_experience = ", ".join(parts)
-        else:
-            final_experience = enhanced_desc
-        # Replace the last-added original experience with the approved one
-        context.user_data["experience"][-1] = final_experience
-        await query.edit_message_text("Great, I've saved the AI-enhanced version.")
-    else:
-        # The original is already in the list, so we just need to clean up
-        context.user_data.pop("enhanced_experience_desc", None)
-        await query.edit_message_text("Okay, I've saved your original version.")
-
-    await query.message.reply_text("Enter another job experience, or click 'Done'.")
+    """Stores an experience entry and asks for the next one."""
+    experience_text = update.message.text
+    context.user_data["experience"].append(experience_text)
+    await update.message.reply_text(f"Experience added. Enter another one, or click 'Done'.")
     return States.GETTING_EXPERIENCE
 
 
 async def experience_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Ends the experience section and asks for education."""
+    """Ends the experience section, runs batch enhancement, and asks for education."""
     await update.message.reply_text(
-        "Experience section complete! Now, let's add your education.",
+        "Experience section complete! I will now enhance the descriptions with AI...",
         reply_markup=ReplyKeyboardRemove(),
     )
 
+    original_experiences = context.user_data.get("experience", [])
+    if original_experiences:
+        enhanced_experiences = gemini_client.enhance_multiple_experiences(original_experiences)
+        if enhanced_experiences:
+            context.user_data["experience"] = enhanced_experiences
+            await update.message.reply_text("Descriptions enhanced successfully!")
+        else:
+            await update.message.reply_text("AI enhancement failed, using your original descriptions.")
+
+    # Proceed to the next step
     reply_keyboard = [["Done"]]
     await update.message.reply_text(
         "Please enter one education entry at a time using this format:\n"
@@ -354,33 +307,106 @@ async def get_education(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 import generator
 
 async def education_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Ends data collection, generates PDF, and sends it."""
+    """Ends data collection and asks about tailoring."""
     await update.message.reply_text(
-        "All information collected! I'm now generating your resume...",
+        "All information collected!",
         reply_markup=ReplyKeyboardRemove(),
     )
 
-    # For debugging
-    logger.info(f"Final user data: {context.user_data}")
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Yes, please!", callback_data="tailor_yes"),
+            InlineKeyboardButton("❌ No, thanks", callback_data="tailor_no"),
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
+    await update.message.reply_text(
+        "Would you like me to tailor your resume for a specific job description?",
+        reply_markup=reply_markup,
+    )
+    return States.ASKING_TAILOR
+
+
+async def handle_tailor_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handles the user's choice about tailoring."""
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "tailor_yes":
+        await query.edit_message_text("Great! Please paste the job description below.")
+        return States.GETTING_JOB_DESCRIPTION
+    else:
+        await query.edit_message_text("Okay, I'll generate your resume with the information I have.")
+        return await generate_and_send_pdf(update, context)
+
+
+async def get_job_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Gets the job description and calls the tailoring AI."""
+    job_description = update.message.text
+    await update.message.reply_text("Analyzing the job description and tailoring your resume...")
+
+    tailoring_suggestions = gemini_client.tailor_resume_for_job(context.user_data, job_description)
+
+    if tailoring_suggestions:
+        context.user_data["tailored_summary"] = tailoring_suggestions["tailored_summary"]
+
+        keyboard = [
+            [InlineKeyboardButton("✅ Apply Changes", callback_data="apply_tailoring")],
+            [InlineKeyboardButton("❌ Keep Original", callback_data="reject_tailoring")],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        skills_text = "\n- ".join(tailoring_suggestions["suggested_skills"])
+        await update.message.reply_text(
+            "Here are my suggestions:\n\n"
+            "**Tailored Summary:**\n"
+            f"_{tailoring_suggestions['tailored_summary']}_\n\n"
+            "**Suggested Skills to Add:**\n"
+            f"- {skills_text}\n\n"
+            "Would you like to apply the new summary to your resume?",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return States.AWAITING_TAILOR_APPROVAL
+    else:
+        await update.message.reply_text("Sorry, the AI tailoring failed. I'll generate the resume with your original data.")
+        return await generate_and_send_pdf(update, context)
+
+
+async def handle_tailor_approval(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handles the user's choice for the tailoring and generates the PDF."""
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "apply_tailoring":
+        context.user_data["summary"] = context.user_data["tailored_summary"]
+        await query.edit_message_text("Okay, I've updated your summary.")
+    else:
+        await query.edit_message_text("No problem. I'll use your original summary.")
+
+    return await generate_and_send_pdf(update, context)
+
+
+async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Helper function to generate, send, and clean up the PDF."""
+    message_sender = update.callback_query.message if update.callback_query else update.message
+    await message_sender.reply_text("I'm now generating your resume...")
+
+    logger.info(f"Final user data: {context.user_data}")
     pdf_path = generator.generate_pdf(context.user_data)
 
     if pdf_path and os.path.exists(pdf_path):
-        await update.message.reply_document(
+        await message_sender.reply_document(
             document=open(pdf_path, 'rb'),
             filename=f"{context.user_data.get('name', 'resume')}.pdf",
             caption="Here is your generated resume!"
         )
-        # Clean up the generated PDF
         os.remove(pdf_path)
     else:
-        await update.message.reply_text(
-            "Sorry, something went wrong while generating your PDF. Please try again later."
-        )
+        await message_sender.reply_text("Sorry, something went wrong while generating your PDF.")
 
-    # Clean up the user's photo if it exists
     if 'photo_path' in context.user_data:
-        # The photo path is a file URI, need to convert it back to a normal path
         local_photo_path = context.user_data['photo_path'].replace('file://', '')
         if os.path.exists(local_photo_path):
             try:
@@ -389,7 +415,6 @@ async def education_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             except OSError as e:
                 logger.error(f"Error cleaning up photo {local_photo_path}: {e}")
 
-    # Clear user data for the next session
     context.user_data.clear()
     return ConversationHandler.END
 
@@ -447,12 +472,18 @@ def main() -> None:
                 MessageHandler(filters.Regex("^Done$"), experience_done),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_experience),
             ],
-            States.AWAITING_EXPERIENCE_APPROVAL: [
-                CallbackQueryHandler(handle_experience_approval)
-            ],
             States.GETTING_EDUCATION: [
                 MessageHandler(filters.Regex("^Done$"), education_done),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_education),
+            ],
+            States.ASKING_TAILOR: [
+                CallbackQueryHandler(handle_tailor_choice)
+            ],
+            States.GETTING_JOB_DESCRIPTION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_job_description)
+            ],
+            States.AWAITING_TAILOR_APPROVAL: [
+                CallbackQueryHandler(handle_tailor_approval)
             ],
             # Other states will be added here
         },
