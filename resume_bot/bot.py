@@ -119,7 +119,10 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the name and asks for contact info."""
     context.user_data["name"] = update.message.text
     await update.message.reply_text(
-        f"Thanks, {update.message.text}. Now, please provide your email and phone number, separated by a comma."
+        f"Thanks, {update.message.text}. Now, please provide your email and phone number.\n\n"
+        "**Example:**\n"
+        "john.doe@email.com, 123-456-7890",
+        parse_mode="Markdown"
     )
     return States.GETTING_CONTACTS
 
@@ -148,7 +151,8 @@ async def get_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
     await update.message.reply_text("Thanks. I'm now using AI to enhance your summary...")
 
-    enhanced_summary = gemini_client.enhance_summary(original_summary)
+    template_style = context.user_data.get("template", "modern")
+    enhanced_summary = gemini_client.enhance_summary(original_summary, template_style=template_style)
 
     if enhanced_summary:
         context.user_data["enhanced_summary"] = enhanced_summary
@@ -196,24 +200,33 @@ async def handle_summary_approval(update: Update, context: ContextTypes.DEFAULT_
 async def start_getting_skills(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Shared function to start the skill collection process."""
     reply_keyboard = [["Done"]]
-    # Use a different message depending on whether it's from a callback or a message
     message_sender = update.callback_query.message if update.callback_query else update.message
     await message_sender.reply_text(
-        "Now, list your skills, one message at a time. "
-        "Click 'Done' when you are finished.",
+        "Now, list your skills and rate your proficiency from 1 to 5.\n\n"
+        "**Format:** `Skill Name, Rating`\n"
+        "**Example:** `Python, 5`\n\n"
+        "Enter one skill at a time. Click 'Done' when you are finished.",
         reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard, one_time_keyboard=True, input_field_placeholder="Enter a skill"
+            reply_keyboard, one_time_keyboard=True, input_field_placeholder="e.g., Python, 5"
         ),
+        parse_mode="Markdown"
     )
     context.user_data["skills"] = []
     return States.GETTING_SKILLS
 
 
 async def get_skill(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores a skill and asks for the next one."""
-    skill = update.message.text
-    context.user_data["skills"].append(skill)
-    await update.message.reply_text(f"'{skill}' added. Enter another skill, or click 'Done'.")
+    """Stores a skill and its rating, then asks for the next one."""
+    parts = [p.strip() for p in update.message.text.split(',')]
+    if len(parts) == 2 and parts[1].isdigit() and 1 <= int(parts[1]) <= 5:
+        skill_name = parts[0]
+        skill_rating = int(parts[1])
+        context.user_data["skills"].append({"name": skill_name, "rating": skill_rating})
+        await update.message.reply_text(f"'{skill_name}' with rating {skill_rating} added. Enter another skill, or click 'Done'.")
+    else:
+        await update.message.reply_text(
+            "Invalid format. Please use the format: `Skill Name, Rating` (e.g., Python, 5). The rating must be a number between 1 and 5."
+        )
     return States.GETTING_SKILLS
 
 
@@ -226,13 +239,15 @@ async def skills_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
     reply_keyboard = [["Done"]]
     await update.message.reply_text(
-        "Please enter your most recent job experience.\n"
-        "Format: Job Title, Company, Start Date - End Date, Description (optional)\n"
-        "Example: Software Engineer, Google, 2020 - Present, Developed cool stuff.\n\n"
-        "Enter one job at a time. Click 'Done' when you are finished.",
+        "Please enter one job at a time using this format:\n"
+        "`Job Title, Company, Start Date - End Date, Key responsibilities or achievements`\n\n"
+        "**Example:**\n"
+        "Software Engineer, Google, 2020 - Present, Developed a scalable web application that increased user engagement by 15%.\n\n"
+        "Click 'Done' when you are finished.",
         reply_markup=ReplyKeyboardMarkup(
             reply_keyboard, one_time_keyboard=True, input_field_placeholder="Enter a job"
         ),
+        parse_mode="Markdown"
     )
     context.user_data["experience"] = []
     return States.GETTING_EXPERIENCE
@@ -314,13 +329,15 @@ async def experience_done(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     reply_keyboard = [["Done"]]
     await update.message.reply_text(
-        "Please enter your education.\n"
-        "Format: Degree, University, Graduation Year\n"
-        "Example: B.S. in Computer Science, MIT, 2020\n\n"
-        "Enter one at a time. Click 'Done' when you are finished.",
+        "Please enter one education entry at a time using this format:\n"
+        "`Degree, University, Graduation Year`\n\n"
+        "**Example:**\n"
+        "B.S. in Computer Science, MIT, 2020\n\n"
+        "Click 'Done' when you are finished.",
         reply_markup=ReplyKeyboardMarkup(
             reply_keyboard, one_time_keyboard=True, input_field_placeholder="Enter education"
         ),
+        parse_mode="Markdown"
     )
     context.user_data["education"] = []
     return States.GETTING_EDUCATION

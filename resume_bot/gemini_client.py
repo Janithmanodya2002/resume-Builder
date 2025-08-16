@@ -10,15 +10,20 @@ except Exception as e:
     logging.error(f"Failed to configure Gemini: {e}")
     model = None
 
-def enhance_summary(text: str) -> str | None:
+def enhance_summary(text: str, template_style: str = "modern") -> str | None:
     """
-    Rewrites a user's summary into a more professional version using Gemini.
+    Rewrites a user's summary into a more professional version using Gemini,
+    with style-specific prompts.
     """
     if not model:
         logging.warning("Gemini model not available. Skipping enhancement.")
         return None
 
-    prompt = f"Rewrite the following into a professional and impactful resume summary (2-4 sentences max): '{text}'"
+    if template_style == 'creative':
+        prompt = f"Rewrite the following into a unique, creative, and compelling professional summary for a resume (2-4 sentences max). Use a slightly more personal and narrative tone. Original text: '{text}'"
+    else: # Default to modern/professional
+        prompt = f"Rewrite the following into a professional and impactful resume summary (2-4 sentences max): '{text}'"
+
     try:
         response = model.generate_content(prompt)
         return response.text

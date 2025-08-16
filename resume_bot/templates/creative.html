@@ -62,8 +62,22 @@
             padding: 0;
             text-align: left;
         }
-        .sidebar .skills li {
-            margin-bottom: 8px;
+        .sidebar .skill-item {
+            margin-bottom: 10px;
+        }
+        .sidebar .skill-name {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .sidebar .skill-bar {
+            background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+            height: 8px;
+        }
+        .sidebar .skill-level {
+            background-color: #fff;
+            height: 100%;
+            border-radius: 3px;
         }
         .main-content h2 {
             color: {{ accent_color | default('#2c3e50') }};
@@ -109,21 +123,29 @@
                 <p>{{ phone | e }}</p>
             </div>
 
+            {% if skills %}
             <div class="section skills">
                 <h2>Skills</h2>
-                <ul>
-                    {% for skill in skills %}
-                    <li>{{ skill | e }}</li>
-                    {% endfor %}
-                </ul>
+                {% for skill in skills %}
+                <div class="skill-item">
+                    <span class="skill-name">{{ skill.name | e }}</span>
+                    <div class="skill-bar">
+                        <div class="skill-level" style="width: {{ skill.rating / 5 * 100 }}%;"></div>
+                    </div>
+                </div>
+                {% endfor %}
             </div>
+            {% endif %}
         </div>
         <div class="main-content">
+            {% if summary %}
             <div class="section summary">
                 <h2>Summary</h2>
                 <p>{{ summary | e }}</p>
             </div>
+            {% endif %}
 
+            {% if experience %}
             <div class="section experience">
                 <h2>Work Experience</h2>
                 {% for exp in experience %}
@@ -137,7 +159,9 @@
                 </div>
                 {% endfor %}
             </div>
+            {% endif %}
 
+            {% if education %}
             <div class="section education">
                 <h2>Education</h2>
                 {% for edu in education %}
@@ -148,6 +172,7 @@
                 </div>
                 {% endfor %}
             </div>
+            {% endif %}
         </div>
     </div>
 </body>
