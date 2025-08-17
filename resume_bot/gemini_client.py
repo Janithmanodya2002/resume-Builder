@@ -2,6 +2,28 @@ import google.generativeai as genai
 from config import GEMINI_API_KEY
 import logging
 import json
+import re
+
+def clean_markdown(text: str) -> str:
+    """Removes common markdown formatting characters from a string."""
+    if not isinstance(text, str):
+        return text
+    # Remove bold, italic, strikethrough, code
+    text = re.sub(r'([*_`~])', '', text)
+    # A simple way to handle links, just keep the text part: [text](url) -> text
+    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+    return text
+
+def clean_data_recursively(data):
+    """Recursively cleans markdown from all string values in a nested data structure."""
+    if isinstance(data, dict):
+        return {k: clean_data_recursively(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [clean_data_recursively(i) for i in data]
+    elif isinstance(data, str):
+        return clean_markdown(data)
+    else:
+        return data
 
 # Configure the Gemini API client
 try:
@@ -27,7 +49,7 @@ def enhance_summary(text: str, template_style: str = "modern") -> str | None:
 
     try:
         response = model.generate_content(prompt)
-        return response.text
+        return clean_markdown(response.text)
     except Exception as e:
         logging.error(f"Gemini API call failed for summary enhancement: {e}")
         return None
@@ -47,7 +69,7 @@ def enhance_experience(duties: list[str]) -> list[str] | None:
 
     try:
         response = model.generate_content(prompt)
-        enhanced_duties = [line.strip().lstrip('- ').capitalize() for line in response.text.strip().split('\n') if line.strip()]
+        enhanced_duties = [clean_markdown(line.strip().lstrip('- ').capitalize()) for line in response.text.strip().split('\n') if line.strip()]
         return enhanced_duties
     except Exception as e:
         logging.error(f"Gemini API call failed for experience enhancement: {e}")
@@ -81,7 +103,7 @@ def enhance_multiple_experiences(experiences: list[str]) -> list[str] | None:
     try:
         response = model.generate_content(prompt)
         # Process the response, which should be a numbered list
-        enhanced_descriptions = [line.strip().lstrip('0123456789. ') for line in response.text.strip().split('\n') if line.strip()]
+        enhanced_descriptions = [clean_markdown(line.strip().lstrip('0123456789. ')) for line in response.text.strip().split('\n') if line.strip()]
 
         if len(enhanced_descriptions) != len(experiences):
             logging.warning("Batch enhancement returned a different number of items. Falling back to original.")
@@ -129,7 +151,7 @@ def generate_about_me(user_data: dict) -> str | None:
 
     try:
         response = model.generate_content(prompt)
-        return response.text.strip()
+        return clean_markdown(response.text.strip())
     except Exception as e:
         logging.error(f"Gemini API call failed for 'About Me' generation: {e}")
         return None
@@ -170,10 +192,10 @@ def tailor_resume_for_job(user_data: dict, job_description: str) -> dict | None:
         response = model.generate_content(prompt)
 
         # Parse the structured response
-        summary_part = response.text.split("--- TAILORED SUMMARY ---")[1].split("--- SUGGESTED SKILLS ---")[0].strip()
+        summary_part = clean_markdown(response.text.split("--- TAILORED SUMMARY ---")[1].split("--- SUGGESTED SKILLS ---")[0].strip())
         skills_part = response.text.split("--- SUGGESTED SKILLS ---")[1].strip()
 
-        suggested_skills = [skill.strip().lstrip('- ') for skill in skills_part.split('\n') if skill.strip()]
+        suggested_skills = [clean_markdown(skill.strip().lstrip('- ')) for skill in skills_part.split('\n') if skill.strip()]
 
         return {
             "tailored_summary": summary_part,
@@ -213,7 +235,7 @@ def parse_resume_data(text: str) -> dict | None:
         logging.info(f"Gemini cleaned response for parsing: {clean_response}")
 
         parsed_data = json.loads(clean_response)
-        return parsed_data
+        return clean_data_recursively(parsed_data)
 
     except json.JSONDecodeError as e:
         logging.error(f"Failed to decode JSON from Gemini response: {e}")
