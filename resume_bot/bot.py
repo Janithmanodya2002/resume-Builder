@@ -48,6 +48,7 @@ class States(Enum):
     AWAITING_SMART_APPROVAL = 17
     CHOOSING_INPUT_METHOD = 18
     AWAITING_REGENERATION = 19
+    ASK_FOR_REVIEW = 20
 
 
 # --- START HANDLER ---
@@ -376,21 +377,51 @@ async def get_education(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 import generator
 
 async def education_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Ends data collection and asks about tailoring."""
+    """Ends data collection and asks if the user wants to review their data."""
     await update.message.reply_text(
         "All information collected!",
         reply_markup=ReplyKeyboardRemove(),
     )
     
-    reply_keyboard = [["✅ Yes, please!", "❌ No, thanks"]]
+    reply_keyboard = [["✍️ Yes, review my data", "👍 No, looks good"]]
 
     await update.message.reply_text(
-        "Would you like me to tailor your resume for a specific job description?",
+        "Before we generate the PDF, would you like to review and edit any of the information you've provided?",
         reply_markup=ReplyKeyboardMarkup(
             reply_keyboard, one_time_keyboard=True, resize_keyboard=True
         ),
     )
-    return States.ASKING_TAILOR
+    return States.ASK_FOR_REVIEW
+
+
+async def handle_review_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handles the user's choice to review their data or not."""
+    choice = update.message.text
+
+    if "✍️ Yes, review my data" in choice:
+        context.user_data['review_mode'] = True
+        name = context.user_data.get('name')
+        prompt = f"I found the name: `{name}`.\nPlease send the correct name, or send this one to confirm." if name else "What is your full name?"
+
+        await update.message.reply_text(
+            "No problem. Let's review the extracted information step-by-step.\n\n" + prompt,
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode="Markdown"
+        )
+        return States.GETTING_NAME
+    else:  # "👍 No, looks good"
+        # Clear the review_mode flag if it was set
+        if 'review_mode' in context.user_data:
+            del context.user_data['review_mode']
+
+        reply_keyboard = [["✅ Yes, please!", "❌ No, thanks"]]
+        await update.message.reply_text(
+            "Great! Would you like me to tailor your resume for a specific job description?",
+            reply_markup=ReplyKeyboardMarkup(
+                reply_keyboard, one_time_keyboard=True, resize_keyboard=True
+            ),
+        )
+        return States.ASKING_TAILOR
 
 
 async def handle_tailor_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -463,6 +494,10 @@ async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TY
         pdf_path, template_name = pdf_generation_result
         context.user_data['last_template'] = template_name # Save the used template
 
+        # Initialize or increment the regeneration counter
+        if 'regeneration_count' not in context.user_data:
+            context.user_data['regeneration_count'] = 1
+
         await message_sender.reply_document(
             document=open(pdf_path, 'rb'),
             filename=f"{context.user_data.get('name', 'resume')}.pdf",
@@ -490,6 +525,14 @@ async def handle_regeneration_choice(update: Update, context: ContextTypes.DEFAU
     choice = update.message.text
 
     if "🎨 Regenerate with New Design" in choice:
+        if context.user_data['regeneration_count'] >= 5:
+            await update.message.reply_text(
+                "You have reached the maximum number of regenerations for this session. Please start over to create a new resume.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            return await finish_conversation(update, context)
+
+        context.user_data['regeneration_count'] += 1
         await update.message.reply_text("On it! Generating a new design...", reply_markup=ReplyKeyboardRemove())
         # Call the generator again, excluding the last template used
         return await generate_and_send_pdf(update, context, exclude_template=context.user_data.get('last_template'))
@@ -677,6 +720,9 @@ async def main() -> None:
             States.GETTING_EDUCATION: [
                 MessageHandler(filters.Regex("^Done$"), education_done),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_education),
+            ],
+            States.ASK_FOR_REVIEW: [
+                MessageHandler(filters.Regex("^(✍️ Yes, review my data|👍 No, looks good)$"), handle_review_choice)
             ],
             States.ASKING_TAILOR: [
                 MessageHandler(filters.Regex("^(✅ Yes, please!|❌ No, thanks)$"), handle_tailor_choice)
