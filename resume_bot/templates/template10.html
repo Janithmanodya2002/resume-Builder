@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 25mm;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.5;
+            color: #333;
+            font-size: 10pt;
+        }
+        .container {
+            width: 100%;
+        }
+        .name {
+            font-size: 2em;
+            font-weight: bold;
+            margin: 0;
+            text-align: center;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .contact-info {
+            text-align: center;
+            margin-bottom: 2em;
+            font-size: 0.9em;
+            color: #666;
+        }
+        h2 {
+            font-size: 1.1em;
+            font-weight: bold;
+            margin-top: 1.5em;
+            margin-bottom: 0.8em;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 0.3em;
+        }
+        .section {
+            margin-bottom: 1em;
+        }
+        .experience-item, .education-item {
+            margin-bottom: 1.2em;
+            display: grid;
+            grid-template-columns: 1fr 3fr;
+            gap: 10px;
+        }
+        .date-location {
+            text-align: right;
+        }
+        .date, .location {
+            display: block;
+            color: #666;
+        }
+        .company, .university {
+            font-weight: bold;
+            color: #444;
+        }
+        .experience-item h3, .education-item h3 {
+            margin: 0;
+            font-size: 1em;
+            font-weight: bold;
+        }
+        .experience-item ul {
+            padding-left: 15px;
+            margin: 5px 0 0 0;
+            grid-column: 2;
+        }
+        .skills ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .skills li {
+            background-color: #eee;
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="name">{{ name | e }}</h1>
+        <div class="contact-info">
+            {{ email | e }} &bull; {{ phone | e }}
+        </div>
+
+        {% if summary %}
+        <div class="section summary">
+            <p>{{ summary | e }}</p>
+        </div>
+        {% endif %}
+
+        {% if experience %}
+        <div class="section experience">
+            <h2>Experience</h2>
+            {% for exp in experience %}
+            {% set parts = exp.split(',') %}
+            <div class="experience-item">
+                <div class="date-location">
+                    <span class="date">{{ parts[2] | default('', true) | e }}</span>
+                </div>
+                <div>
+                    <h3>{{ parts[0] | e }}</h3>
+                    <span class="company">{{ parts[1] | default('', true) | e }}</span>
+                    <ul>
+                        <li>{{ parts[3] | default('', true) | e }}</li>
+                    </ul>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if education %}
+        <div class="section education">
+            <h2>Education</h2>
+            {% for edu in education %}
+            {% set parts = edu.split(',') %}
+            <div class="education-item">
+                <div class="date-location">
+                    <span class="date">{{ parts[2] | default('', true) | e }}</span>
+                </div>
+                <div>
+                    <h3>{{ parts[0] | e }}</h3>
+                    <span class="university">{{ parts[1] | default('', true) | e }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if skills %}
+        <div class="section skills">
+            <h2>Skills</h2>
+            <ul>
+                {% for skill in skills %}
+                <li>{{ skill.name | e }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

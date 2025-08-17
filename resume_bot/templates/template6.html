@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Georgia:wght@400;700&display=swap');
+        @page {
+            size: A4;
+            margin: 25mm;
+        }
+        body {
+            font-family: 'Georgia', serif;
+            line-height: 1.7;
+            color: #333;
+        }
+        .container {
+            border-top: 5px solid {{ accent_color | default('#8e44ad') }};
+        }
+        .header {
+            text-align: left;
+            margin-bottom: 25px;
+        }
+        .name {
+            font-size: 3em;
+            font-weight: 700;
+            margin: 20px 0 5px 0;
+        }
+        .contact-info {
+            font-size: 0.9em;
+            color: #555;
+        }
+        .contact-info span {
+            margin-right: 15px;
+        }
+        h2 {
+            font-size: 1.6em;
+            font-weight: 700;
+            color: #333;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            padding-left: 10px;
+            border-left: 4px solid {{ accent_color | default('#8e44ad') }};
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        .summary p {
+            font-style: italic;
+        }
+        .skills ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+        .skills li {
+            display: inline-block;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            background-color: #f1eaf5;
+            color: #8e44ad;
+            padding: 5px 12px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        .experience-item, .education-item {
+            margin-bottom: 20px;
+            padding-left: 15px;
+        }
+        .experience-item h3, .education-item h3 {
+            margin: 0;
+            font-size: 1.2em;
+        }
+        .experience-item .header, .education-item .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 5px;
+        }
+        .experience-item .company, .education-item .university {
+            font-weight: 700;
+            color: #555;
+        }
+        .experience-item .date, .education-item .date {
+            font-style: italic;
+            color: #777;
+            font-size: 0.9em;
+        }
+        .experience-item ul {
+            padding-left: 20px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="name">{{ name | e }}</h1>
+            <div class="contact-info">
+                <span>{{ email | e }}</span>
+                <span>{{ phone | e }}</span>
+            </div>
+        </div>
+
+        {% if summary %}
+        <div class="section summary">
+            <h2>Summary</h2>
+            <p>{{ summary | e }}</p>
+        </div>
+        {% endif %}
+
+        {% if skills %}
+        <div class="section skills">
+            <h2>Skills</h2>
+            <ul>
+                {% for skill in skills %}
+                <li>{{ skill.name | e }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if experience %}
+        <div class="section experience">
+            <h2>Work Experience</h2>
+            {% for exp in experience %}
+            {% set parts = exp.split(',') %}
+            <div class="experience-item">
+                <div class="header">
+                    <h3>{{ parts[0] | e }}</h3>
+                    <span class="date">{{ parts[2] | default('', true) | e }}</span>
+                </div>
+                <span class="company">{{ parts[1] | default('', true) | e }}</span>
+                <ul>
+                    <li>{{ parts[3] | default('', true) | e }}</li>
+                </ul>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if education %}
+        <div class="section education">
+            <h2>Education</h2>
+            {% for edu in education %}
+            {% set parts = edu.split(',') %}
+            <div class="education-item">
+                <div class="header">
+                    <h3>{{ parts[0] | e }}</h3>
+                    <span class="date">{{ parts[2] | default('', true) | e }}</span>
+                </div>
+                <span class="university">{{ parts[1] | default('', true) | e }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

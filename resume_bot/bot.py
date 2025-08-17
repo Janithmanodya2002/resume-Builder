@@ -51,34 +51,13 @@ class States(Enum):
 
 # --- START HANDLER ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Starts the conversation and asks for the template using reply keyboard."""
-    reply_keyboard = [["Modern", "Creative"]]
-
-    await update.message.reply_text(
-        "Welcome to the Resume Bot! Let's create your resume.\n\n"
-        "Please choose a template:",
-        reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard, one_time_keyboard=True, resize_keyboard=True
-        ),
-    )
-    return States.SELECTING_TEMPLATE
-
-
-# --- TEMPLATE SELECTION ---
-async def select_template(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the selected template and asks for an accent color."""
-    template_name = update.message.text.strip().lower()
-    if template_name not in ["modern", "creative"]:
-        await update.message.reply_text(
-            "Invalid choice. Please type 'Modern' or 'Creative'."
-        )
-        return States.SELECTING_TEMPLATE
-
-    context.user_data["template"] = template_name
+    """Starts the conversation and asks for an accent color."""
     reply_keyboard = [["Blue", "Green"], ["Red", "Purple"]]
 
     await update.message.reply_text(
-        f"You selected the '{template_name}' template. Now, pick an accent color:",
+        "Welcome to the Resume Bot! Let's create your resume.\n\n"
+        "A random template will be selected for you.\n\n"
+        "First, pick an accent color:",
         reply_markup=ReplyKeyboardMarkup(
             reply_keyboard, one_time_keyboard=True, resize_keyboard=True
         ),
@@ -108,8 +87,7 @@ async def select_color(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     reply_keyboard = [["📷 Upload Photo", "➡️ Skip Photo"]]
 
     await update.message.reply_text(
-        f"Great! You've chosen the {context.user_data['template']} template "
-        f"with {color_choice} as the accent color.\n\n"
+        f"Great! You've chosen {color_choice} as the accent color.\n\n"
         "Would you like to add a profile photo?",
         reply_markup=ReplyKeyboardMarkup(
             reply_keyboard, one_time_keyboard=True, resize_keyboard=True
@@ -230,8 +208,7 @@ async def get_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     
     await update.message.reply_text("Thanks. I'm now using AI to enhance your summary...")
     
-    template_style = context.user_data.get("template", "modern")
-    enhanced_summary = gemini_client.enhance_summary(original_summary, template_style=template_style)
+    enhanced_summary = gemini_client.enhance_summary(original_summary)
     
     if enhanced_summary:
         context.user_data["enhanced_summary"] = enhanced_summary
@@ -561,8 +538,7 @@ async def get_all_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     context.user_data.setdefault('experience', [])
     context.user_data.setdefault('education', [])
 
-    # For now, we will assume the user wants to start with the "modern" template and "blue" color
-    context.user_data.setdefault('template', 'modern')
+    # A random template will be chosen, so we only set the default color and photo path
     context.user_data.setdefault('accent_color', '#3498db')
     context.user_data.setdefault('photo_path', None)
 
@@ -619,9 +595,6 @@ async def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            States.SELECTING_TEMPLATE: [
-                MessageHandler(filters.Regex("^(?i)(modern|creative)$"), select_template),
-            ],
             States.SELECTING_COLOR: [
                 MessageHandler(filters.Regex("^(?i)(blue|green|red|purple)$"), select_color),
             ],

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Roboto+Slab:wght@400&display=swap');
+        @page {
+            size: A4;
+            margin: 0;
+        }
+        body {
+            font-family: 'Roboto Slab', serif;
+            line-height: 1.6;
+            color: #4a4a4a;
+        }
+        .container {
+            width: 210mm;
+            height: 297mm;
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            grid-template-rows: auto 1fr;
+        }
+        .header {
+            grid-column: 1 / -1;
+            background-color: #f7f1e3;
+            padding: 30px;
+            text-align: center;
+        }
+        .name {
+            font-family: 'Playfair Display', serif;
+            font-size: 3em;
+            margin: 0;
+            color: {{ accent_color | default('#d35400') }};
+        }
+        .contact-info {
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+        .sidebar {
+            background-color: #f7f1e3;
+            padding: 0 30px 30px 30px;
+        }
+        .main-content {
+            padding: 30px;
+        }
+        .profile-img {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin: -80px auto 20px;
+            display: block;
+            border: 6px solid #fff;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+        }
+        h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.3em;
+            color: {{ accent_color | default('#d35400') }};
+            margin-top: 20px;
+            margin-bottom: 15px;
+        }
+        .sidebar h2 {
+            text-align: right;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        .skills ul {
+            list-style-type: none;
+            padding: 0;
+            text-align: right;
+        }
+        .experience-item, .education-item {
+            margin-bottom: 20px;
+        }
+        .experience-item h3, .education-item h3 {
+            margin: 0;
+            font-size: 1.1em;
+            font-family: 'Playfair Display', serif;
+        }
+        .experience-item .company, .education-item .university {
+            font-weight: 600;
+            color: #666;
+        }
+        .experience-item .date, .education-item .date {
+            font-style: italic;
+            color: #888;
+            font-size: 0.9em;
+        }
+        .experience-item ul {
+            padding-left: 20px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="name">{{ name | e }}</h1>
+            <div class="contact-info">
+                <span>{{ email | e }} | {{ phone | e }}</span>
+            </div>
+        </div>
+        <div class="sidebar">
+            {% if photo_path %}
+            <img src="{{ photo_path }}" alt="Profile Photo" class="profile-img">
+            {% endif %}
+            <div class="section skills">
+                <h2>Skills</h2>
+                <ul>
+                    {% for skill in skills %}
+                    <li>{{ skill.name | e }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        <div class="main-content">
+            {% if summary %}
+            <div class="section summary">
+                <h2>Profile</h2>
+                <p>{{ summary | e }}</p>
+            </div>
+            {% endif %}
+
+            {% if experience %}
+            <div class="section experience">
+                <h2>Experience</h2>
+                {% for exp in experience %}
+                {% set parts = exp.split(',') %}
+                <div class="experience-item">
+                    <h3>{{ parts[0] | e }}</h3>
+                    <div>
+                        <span class="company">{{ parts[1] | default('', true) | e }}</span> -
+                        <span class="date">{{ parts[2] | default('', true) | e }}</span>
+                    </div>
+                    <ul>
+                        <li>{{ parts[3] | default('', true) | e }}</li>
+                    </ul>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if education %}
+            <div class="section education">
+                <h2>Education</h2>
+                {% for edu in education %}
+                {% set parts = edu.split(',') %}
+                <div class="education-item">
+                    <h3>{{ parts[0] | e }}</h3>
+                    <div>
+                        <span class="university">{{ parts[1] | default('', true) | e }}</span> -
+                        <span class="date">{{ parts[2] | default('', true) | e }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

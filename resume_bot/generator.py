@@ -1,6 +1,7 @@
 import os
 import uuid
 import logging
+import random
 from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML
 from config import TEMPLATES
@@ -25,11 +26,14 @@ def generate_pdf(user_data: dict) -> str | None:
         # 1. Set up Jinja2 environment with a reliable path to the templates directory
         env = Environment(loader=FileSystemLoader(templates_dir))
 
-        # 2. Get the correct template path from the config
-        template_name = user_data.get("template", "modern") # Default to modern
-        template_path = TEMPLATES.get(template_name)
-        if not template_path:
-            raise FileNotFoundError(f"Template '{template_name}' not found in config.")
+        # 2. Select a random template from the available options in the config
+        available_templates = list(TEMPLATES.keys())
+        if not available_templates:
+            raise ValueError("No templates found in the configuration.")
+
+        template_name = random.choice(available_templates)
+        template_path = TEMPLATES[template_name]
+        logging.info(f"Randomly selected template: {template_name}")
 
         # The loader's search path is now the templates dir, so we just need the filename
         template_filename = os.path.basename(template_path)
