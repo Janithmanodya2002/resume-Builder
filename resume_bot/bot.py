@@ -23,24 +23,30 @@ logger = logging.getLogger(__name__)
 
 
 import os
+import asyncio
+import tempfile
 
 # Define conversation states using an Enum for clarity
 class States(Enum):
     START = 0
     SELECTING_TEMPLATE = 1
     SELECTING_COLOR = 2
-    UPLOADING_PHOTO = 3
-    GETTING_NAME = 4
-    GETTING_CONTACTS = 5
-    GETTING_SUMMARY = 6
-    AWAITING_SUMMARY_APPROVAL = 7
-    GETTING_SKILLS = 8
-    GETTING_EXPERIENCE = 9
-    GETTING_EDUCATION = 10
-    ASKING_TAILOR = 11
-    GETTING_JOB_DESCRIPTION = 12
-    AWAITING_TAILOR_APPROVAL = 13
-    GENERATING_PDF = 14
+    AWAITING_PHOTO_CHOICE = 3
+    UPLOADING_PHOTO = 4
+    GETTING_NAME = 5
+    GETTING_CONTACTS = 6
+    GETTING_SUMMARY = 7
+    AWAITING_SUMMARY_APPROVAL = 8
+    GETTING_SKILLS = 9
+    GETTING_EXPERIENCE = 10
+    GETTING_EDUCATION = 11
+    ASKING_TAILOR = 12
+    GETTING_JOB_DESCRIPTION = 13
+    AWAITING_TAILOR_APPROVAL = 14
+    GENERATING_PDF = 15
+    GETTING_SMART_INPUT = 16
+    AWAITING_SMART_APPROVAL = 17
+    CHOOSING_INPUT_METHOD = 18
 
 
 # --- START HANDLER ---
@@ -82,7 +88,7 @@ async def select_template(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 # --- COLOR SELECTION ---
 async def select_color(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the selected color and asks for a photo."""
+    """Stores the selected color and asks the user if they want to add a photo."""
     color_map = {
         "Blue": "#3498db",
         "Green": "#2ecc71",
@@ -99,22 +105,44 @@ async def select_color(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
     context.user_data["accent_color"] = color_map[color_choice]
 
+    reply_keyboard = [["📷 Upload Photo", "➡️ Skip Photo"]]
+
     await update.message.reply_text(
         f"Great! You've chosen the {context.user_data['template']} template "
         f"with {color_choice} as the accent color.\n\n"
-        "Now, please upload a profile photo for your resume.",
-        reply_markup=ReplyKeyboardRemove(),  # Remove the keyboard so user can upload photo
+        "Would you like to add a profile photo?",
+        reply_markup=ReplyKeyboardMarkup(
+            reply_keyboard, one_time_keyboard=True, resize_keyboard=True
+        ),
     )
-    return States.UPLOADING_PHOTO
+    return States.AWAITING_PHOTO_CHOICE
+
+
+async def handle_photo_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handles the user's choice to upload or skip the photo."""
+    choice = update.message.text
+
+    if "📷 Upload Photo" in choice:
+        await update.message.reply_text("Okay, please upload your profile photo now.", reply_markup=ReplyKeyboardRemove())
+        return States.UPLOADING_PHOTO
+    else:  # '➡️ Skip Photo'
+        return await skip_photo(update, context)
+
+
+async def skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Skips the photo upload and asks for input method."""
+    context.user_data["photo_path"] = None
+    await update.message.reply_text("No problem. Let's move on.", reply_markup=ReplyKeyboardRemove())
+    return await prompt_for_input_method(update, context)
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the photo and asks for the name."""
+    """Stores the photo and asks for input method."""
     photo_file = await update.message.photo[-1].get_file()
     
     # Create a temporary directory for the user's session
     user_id = update.message.from_user.id
-    temp_dir = f"/tmp/resume_bot/{user_id}"
+    temp_dir = os.path.join(tempfile.gettempdir(), "resume_bot", str(user_id))
     os.makedirs(temp_dir, exist_ok=True)
     
     file_path = os.path.join(temp_dir, "profile_photo.jpg")
@@ -122,21 +150,52 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     
     context.user_data["photo_path"] = file_path
     
+    await update.message.reply_text("Photo received!")
+    return await prompt_for_input_method(update, context)
+
+
+async def prompt_for_input_method(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Asks the user how they want to provide their resume information."""
+    reply_keyboard = [["📝 Step-by-step", "🤖 Smart Paste (AI)"]]
+
     await update.message.reply_text(
-        "Photo received! Now, what is your full name?"
+        "How would you like to provide your resume information?",
+        reply_markup=ReplyKeyboardMarkup(
+            reply_keyboard, one_time_keyboard=True, resize_keyboard=True
+        ),
     )
-    return States.GETTING_NAME
+    return States.CHOOSING_INPUT_METHOD
+
+
+async def handle_input_method_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handles the user's choice of input method."""
+    choice = update.message.text
+
+    if "Step-by-step" in choice:
+        await update.message.reply_text("Great! Let's go step-by-step. What is your full name?", reply_markup=ReplyKeyboardRemove())
+        return States.GETTING_NAME
+    else:  # "Smart Paste (AI)"
+        await update.message.reply_text(
+            "Excellent choice! Please paste your entire resume content below in a single message.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return States.GETTING_SMART_INPUT
 
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the name and asks for contact info."""
     context.user_data["name"] = update.message.text
-    await update.message.reply_text(
-        f"Thanks, {update.message.text}. Now, please provide your email and phone number.\n\n"
-        "**Example:**\n"
-        "john.doe@email.com, 123-456-7890",
-        parse_mode="Markdown"
-    )
+
+    prompt = "Thanks! Now, please provide your email and phone number.\n\n**Example:**\njohn.doe@email.com, 123-456-7890"
+
+    if context.user_data.get('review_mode'):
+        email = context.user_data.get('email')
+        phone = context.user_data.get('phone')
+        if email and phone:
+            prompt = (f"I found these contacts: `{email}, {phone}`.\n"
+                      "Please send the correct contacts to change them, or send the same text to confirm.")
+
+    await update.message.reply_text(prompt, parse_mode="Markdown")
     return States.GETTING_CONTACTS
 
 
@@ -149,9 +208,16 @@ async def get_contacts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     context.user_data["email"] = contacts[0] if len(contacts) > 0 else ""
     context.user_data["phone"] = contacts[1] if len(contacts) > 1 else ""
 
-    await update.message.reply_text(
-        "Contact info saved. Now, please write a professional summary about yourself."
-    )
+    prompt = "Contact info saved. Now, please write a professional summary about yourself."
+
+    if context.user_data.get('review_mode'):
+        summary = context.user_data.get('summary')
+        if summary:
+            prompt = (f"I found this summary:\n\n'_{summary}'_\n\n"
+                      "If this is correct, please send it again to confirm. "
+                      "Otherwise, send a new summary.")
+
+    await update.message.reply_text(prompt, parse_mode="Markdown")
     return States.GETTING_SUMMARY
 
 
@@ -170,18 +236,16 @@ async def get_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     if enhanced_summary:
         context.user_data["enhanced_summary"] = enhanced_summary
         
-        keyboard = [
-            [InlineKeyboardButton("✅ Use AI Version", callback_data="use_ai_summary")],
-            [InlineKeyboardButton("✍️ Keep My Version", callback_data="use_original_summary")],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        reply_keyboard = [["✅ Use AI Version", "✍️ Keep My Version"]]
         
         await update.message.reply_text(
             "Here is the AI-enhanced version of your summary:\n\n"
             f"**AI Version:**\n_{enhanced_summary}_\n\n"
             f"**Your Version:**\n_{original_summary}_\n\n"
             "Which version would you like to use?",
-            reply_markup=reply_markup,
+            reply_markup=ReplyKeyboardMarkup(
+                reply_keyboard, one_time_keyboard=True, resize_keyboard=True
+            ),
             parse_mode="Markdown"
         )
         return States.AWAITING_SUMMARY_APPROVAL
@@ -197,34 +261,42 @@ async def get_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
 async def handle_summary_approval(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handles the user's choice for the summary and asks for skills."""
-    query = update.callback_query
-    await query.answer()
+    choice = update.message.text
     
-    if query.data == "use_ai_summary":
+    if "✅ Use AI Version" in choice:
         context.user_data["summary"] = context.user_data["enhanced_summary"]
-        await query.edit_message_text("Great, I've saved the AI-enhanced summary.")
+        await update.message.reply_text("Great, I've saved the AI-enhanced summary.", reply_markup=ReplyKeyboardRemove())
     else:
         context.user_data["summary"] = context.user_data["original_summary"]
-        await query.edit_message_text("Okay, I've saved your original summary.")
+        await update.message.reply_text("Okay, I've saved your original summary.", reply_markup=ReplyKeyboardRemove())
         
     return await start_getting_skills(update, context)
 
 
 async def start_getting_skills(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Shared function to start the skill collection process."""
-    reply_keyboard = [["Done"]]
     message_sender = update.callback_query.message if update.callback_query else update.message
+
+    prompt = ("Now, list your skills and rate your proficiency from 1 to 5.\n\n"
+              "**Format:** `Skill Name, Rating`\n"
+              "**Example:** `Python, 5`\n\n"
+              "Enter one skill at a time. Click 'Done' when you are finished.")
+
+    if context.user_data.get('review_mode') and context.user_data.get('skills'):
+        skills_list = "\n".join([f"- {s['name']} (Rating: {s['rating']})" for s in context.user_data['skills']])
+        prompt = ("I found the following skills. You can add more, or click 'Done' to accept them and move on.\n\n"
+                  f"{skills_list}")
+    else:
+        context.user_data["skills"] = []
+
+    reply_keyboard = [["Done"]]
     await message_sender.reply_text(
-        "Now, list your skills and rate your proficiency from 1 to 5.\n\n"
-        "**Format:** `Skill Name, Rating`\n"
-        "**Example:** `Python, 5`\n\n"
-        "Enter one skill at a time. Click 'Done' when you are finished.",
+        prompt,
         reply_markup=ReplyKeyboardMarkup(
             reply_keyboard, one_time_keyboard=True, input_field_placeholder="e.g., Python, 5"
         ),
         parse_mode="Markdown"
     )
-    context.user_data["skills"] = []
     return States.GETTING_SKILLS
 
 
@@ -250,19 +322,27 @@ async def skills_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         reply_markup=ReplyKeyboardRemove(),
     )
     
+    prompt = ("Please enter one job at a time using this format:\n"
+              "`Job Title, Company, Start Date - End Date, Key responsibilities or achievements`\n\n"
+              "**Example:**\n"
+              "Software Engineer, Google, 2020 - Present, Developed a scalable web application that increased user engagement by 15%.\n\n"
+              "Click 'Done' when you are finished.")
+
+    if context.user_data.get('review_mode') and context.user_data.get('experience'):
+        exp_list = "\n\n".join(context.user_data['experience'])
+        prompt = ("I found the following work experience entries. You can add more, or click 'Done' to accept them.\n\n"
+                  f"{exp_list}")
+    else:
+        context.user_data["experience"] = []
+
     reply_keyboard = [["Done"]]
     await update.message.reply_text(
-        "Please enter one job at a time using this format:\n"
-        "`Job Title, Company, Start Date - End Date, Key responsibilities or achievements`\n\n"
-        "**Example:**\n"
-        "Software Engineer, Google, 2020 - Present, Developed a scalable web application that increased user engagement by 15%.\n\n"
-        "Click 'Done' when you are finished.",
+        prompt,
         reply_markup=ReplyKeyboardMarkup(
             reply_keyboard, one_time_keyboard=True, input_field_placeholder="Enter a job"
         ),
         parse_mode="Markdown"
     )
-    context.user_data["experience"] = []
     return States.GETTING_EXPERIENCE
 
 
@@ -324,31 +404,26 @@ async def education_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         reply_markup=ReplyKeyboardRemove(),
     )
     
-    keyboard = [
-        [
-            InlineKeyboardButton("✅ Yes, please!", callback_data="tailor_yes"),
-            InlineKeyboardButton("❌ No, thanks", callback_data="tailor_no"),
-        ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    reply_keyboard = [["✅ Yes, please!", "❌ No, thanks"]]
 
     await update.message.reply_text(
         "Would you like me to tailor your resume for a specific job description?",
-        reply_markup=reply_markup,
+        reply_markup=ReplyKeyboardMarkup(
+            reply_keyboard, one_time_keyboard=True, resize_keyboard=True
+        ),
     )
     return States.ASKING_TAILOR
 
 
 async def handle_tailor_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handles the user's choice about tailoring."""
-    query = update.callback_query
-    await query.answer()
+    choice = update.message.text
 
-    if query.data == "tailor_yes":
-        await query.edit_message_text("Great! Please paste the job description below.")
+    if "✅ Yes, please!" in choice:
+        await update.message.reply_text("Great! Please paste the job description below.", reply_markup=ReplyKeyboardRemove())
         return States.GETTING_JOB_DESCRIPTION
     else:
-        await query.edit_message_text("Okay, I'll generate your resume with the information I have.")
+        await update.message.reply_text("Okay, I'll generate your resume with the information I have.", reply_markup=ReplyKeyboardRemove())
         return await generate_and_send_pdf(update, context)
 
 
@@ -362,11 +437,7 @@ async def get_job_description(update: Update, context: ContextTypes.DEFAULT_TYPE
     if tailoring_suggestions:
         context.user_data["tailored_summary"] = tailoring_suggestions["tailored_summary"]
         
-        keyboard = [
-            [InlineKeyboardButton("✅ Apply Changes", callback_data="apply_tailoring")],
-            [InlineKeyboardButton("❌ Keep Original", callback_data="reject_tailoring")],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        reply_keyboard = [["✅ Apply Changes", "❌ Keep Original"]]
 
         skills_text = "\n- ".join(tailoring_suggestions["suggested_skills"])
         await update.message.reply_text(
@@ -376,7 +447,9 @@ async def get_job_description(update: Update, context: ContextTypes.DEFAULT_TYPE
             "**Suggested Skills to Add:**\n"
             f"- {skills_text}\n\n"
             "Would you like to apply the new summary to your resume?",
-            reply_markup=reply_markup,
+            reply_markup=ReplyKeyboardMarkup(
+                reply_keyboard, one_time_keyboard=True, resize_keyboard=True
+            ),
             parse_mode="Markdown"
         )
         return States.AWAITING_TAILOR_APPROVAL
@@ -387,14 +460,13 @@ async def get_job_description(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def handle_tailor_approval(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handles the user's choice for the tailoring and generates the PDF."""
-    query = update.callback_query
-    await query.answer()
+    choice = update.message.text
 
-    if query.data == "apply_tailoring":
+    if "✅ Apply Changes" in choice:
         context.user_data["summary"] = context.user_data["tailored_summary"]
-        await query.edit_message_text("Okay, I've updated your summary.")
+        await update.message.reply_text("Okay, I've updated your summary.", reply_markup=ReplyKeyboardRemove())
     else:
-        await query.edit_message_text("No problem. I'll use your original summary.")
+        await update.message.reply_text("No problem. I'll use your original summary.", reply_markup=ReplyKeyboardRemove())
     
     return await generate_and_send_pdf(update, context)
 
@@ -417,7 +489,7 @@ async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TY
     else:
         await message_sender.reply_text("Sorry, something went wrong while generating your PDF.")
         
-    if 'photo_path' in context.user_data:
+    if context.user_data.get('photo_path'):
         local_photo_path = context.user_data['photo_path'].replace('file://', '')
         if os.path.exists(local_photo_path):
             try:
@@ -456,7 +528,91 @@ async def fallback_callback_handler(update: Update, context: ContextTypes.DEFAUL
     return ConversationHandler.END
 
 
-def main() -> None:
+async def start_smart_resume(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Starts the smart resume process."""
+    await update.message.reply_text(
+        "Welcome to the Smart Resume feature!\n\n"
+        "Please paste your entire resume content below in a single message. "
+        "I will do my best to extract all the relevant information automatically.",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    return States.GETTING_SMART_INPUT
+
+
+async def get_all_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Receives the user's single text block and uses Gemini to parse it."""
+    user_text = update.message.text
+    await update.message.reply_text("Thank you. I am now processing your information with AI. This may take a moment...")
+
+    parsed_data = gemini_client.parse_resume_data(user_text)
+
+    if not parsed_data:
+        await update.message.reply_text(
+            "I'm sorry, I couldn't extract the information from your text. "
+            "Let's try the manual step-by-step process instead."
+        )
+        return await start(update, context) # Fallback to the standard start
+
+    # Store the parsed data in user_data
+    context.user_data.update(parsed_data)
+
+    # Ensure essential keys have default values if missing
+    context.user_data.setdefault('skills', [])
+    context.user_data.setdefault('experience', [])
+    context.user_data.setdefault('education', [])
+
+    # For now, we will assume the user wants to start with the "modern" template and "blue" color
+    context.user_data.setdefault('template', 'modern')
+    context.user_data.setdefault('accent_color', '#3498db')
+    context.user_data.setdefault('photo_path', None)
+
+    # Create a confirmation message
+    confirmation_message = (
+        "I have extracted the following information:\n\n"
+        f"**Name:** {parsed_data.get('name', 'Not found')}\n"
+        f"**Email:** {parsed_data.get('email', 'Not found')}\n"
+        f"**Phone:** {parsed_data.get('phone', 'Not found')}\n"
+        f"**Summary:** {parsed_data.get('summary', 'Not found')}\n"
+        f"**Skills:** {len(parsed_data.get('skills', []))} found\n"
+        f"**Experience:** {len(parsed_data.get('experience', []))} entries found\n\n"
+        "Does this look correct?"
+    )
+
+    reply_keyboard = [["✅ Looks Good!", "✍️ Edit Manually"]]
+
+    await update.message.reply_text(
+        confirmation_message,
+        reply_markup=ReplyKeyboardMarkup(
+            reply_keyboard, one_time_keyboard=True, resize_keyboard=True
+        ),
+        parse_mode="Markdown"
+    )
+
+    return States.AWAITING_SMART_APPROVAL
+
+
+async def handle_smart_approval(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handles the user's confirmation of the parsed data."""
+    choice = update.message.text
+
+    if "✅ Looks Good!" in choice:
+        await update.message.reply_text("Great! All your information has been saved.", reply_markup=ReplyKeyboardRemove())
+        # All data is collected, so we can now ask about tailoring
+        return await education_done(update, context)
+    else:  # "✍️ Edit Manually"
+        context.user_data['review_mode'] = True
+        name = context.user_data.get('name')
+        prompt = f"I found the name: `{name}`.\nPlease send the correct name, or send this one to confirm." if name else "What is your full name?"
+
+        await update.message.reply_text(
+            "No problem. Let's review the extracted information step-by-step.\n\n" + prompt,
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode="Markdown"
+        )
+        return States.GETTING_NAME
+
+
+async def main() -> None:
     """Run the bot."""
     application = Application.builder().token(config.TELEGRAM_TOKEN).build()
 
@@ -468,6 +624,12 @@ def main() -> None:
             ],
             States.SELECTING_COLOR: [
                 MessageHandler(filters.Regex("^(?i)(blue|green|red|purple)$"), select_color),
+            ],
+            States.AWAITING_PHOTO_CHOICE: [
+                MessageHandler(filters.Regex("^(📷 Upload Photo|➡️ Skip Photo)$"), handle_photo_choice)
+            ],
+            States.CHOOSING_INPUT_METHOD: [
+                MessageHandler(filters.Regex("^(📝 Step-by-step|🤖 Smart Paste \(AI\))$"), handle_input_method_choice)
             ],
             States.UPLOADING_PHOTO: [
                 MessageHandler(filters.PHOTO, handle_photo)
@@ -482,7 +644,7 @@ def main() -> None:
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_summary)
             ],
             States.AWAITING_SUMMARY_APPROVAL: [
-                CallbackQueryHandler(handle_summary_approval)
+                MessageHandler(filters.Regex("^(✅ Use AI Version|✍️ Keep My Version)$"), handle_summary_approval)
             ],
             States.GETTING_SKILLS: [
                 MessageHandler(filters.Regex("^Done$"), skills_done),
@@ -497,15 +659,20 @@ def main() -> None:
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_education),
             ],
             States.ASKING_TAILOR: [
-                CallbackQueryHandler(handle_tailor_choice)
+                MessageHandler(filters.Regex("^(✅ Yes, please!|❌ No, thanks)$"), handle_tailor_choice)
             ],
             States.GETTING_JOB_DESCRIPTION: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_job_description)
             ],
             States.AWAITING_TAILOR_APPROVAL: [
-                CallbackQueryHandler(handle_tailor_approval)
+                MessageHandler(filters.Regex("^(✅ Apply Changes|❌ Keep Original)$"), handle_tailor_approval)
             ],
-            # Other states will be added here
+            States.GETTING_SMART_INPUT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_all_data)
+            ],
+            States.AWAITING_SMART_APPROVAL: [
+                MessageHandler(filters.Regex("^(✅ Looks Good!|✍️ Edit Manually)$"), handle_smart_approval)
+            ],
         },
         fallbacks=[
             CommandHandler("cancel", cancel),
@@ -516,8 +683,13 @@ def main() -> None:
     application.add_handler(conv_handler)
 
     logger.info("Starting bot...")
-    application.run_polling()
+
+    # Run the bot until the user presses Ctrl-C
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+    await asyncio.Future()  # Keep the script running
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

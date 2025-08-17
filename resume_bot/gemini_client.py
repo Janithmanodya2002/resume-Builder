@@ -1,6 +1,7 @@
 import google.generativeai as genai
 from config import GEMINI_API_KEY
 import logging
+import json
 
 # Configure the Gemini API client
 try:
@@ -149,4 +150,42 @@ def tailor_resume_for_job(user_data: dict, job_description: str) -> dict | None:
 
     except Exception as e:
         logging.error(f"Gemini API call failed for resume tailoring: {e}")
+        return None
+
+
+def parse_resume_data(text: str) -> dict | None:
+    """
+    Parses a single block of text to extract structured resume data using Gemini.
+    """
+    if not model:
+        logging.warning("Gemini model not available. Skipping parsing.")
+        return None
+
+    prompt = (
+        "You are an expert data extraction assistant. From the following text, extract the user's name, email, phone number, "
+        "a professional summary, a list of skills (with a proficiency rating from 1-5 if available, otherwise default to 3), "
+        "and a list of work experiences. Return the data as a JSON object with the following keys: 'name', 'email', 'phone', "
+        "'summary', 'skills' (as a list of objects with 'name' and 'rating' keys), and 'experience' (as a list of strings).\n\n"
+        "If a piece of information is not available, set its value to null.\n\n"
+        f"Text to parse:\n---\n{text}\n---"
+    )
+
+    try:
+        response = model.generate_content(prompt)
+        # Clean up the response to ensure it's valid JSON
+        clean_response = response.text.strip().replace("```json", "").replace("```", "").strip()
+
+        # Log the raw and cleaned response for debugging
+        logging.info(f"Gemini raw response for parsing: {response.text}")
+        logging.info(f"Gemini cleaned response for parsing: {clean_response}")
+
+        parsed_data = json.loads(clean_response)
+        return parsed_data
+
+    except json.JSONDecodeError as e:
+        logging.error(f"Failed to decode JSON from Gemini response: {e}")
+        logging.error(f"Response that failed parsing: {clean_response}")
+        return None
+    except Exception as e:
+        logging.error(f"Gemini API call failed for data parsing: {e}")
         return None
