@@ -103,6 +103,38 @@ def enhance_multiple_experiences(experiences: list[str]) -> list[str] | None:
         logging.error(f"Gemini API call failed for batch experience enhancement: {e}")
         return None
 
+def generate_about_me(user_data: dict) -> str | None:
+    """
+    Generates a short 'About Me' section based on the user's resume data.
+    """
+    if not model:
+        logging.warning("Gemini model not available. Skipping 'About Me' generation.")
+        return None
+
+    # Construct a string representation of the user's current resume
+    resume_text = f"""
+    Name: {user_data.get('name', '')}
+    Summary: {user_data.get('summary', '')}
+    Skills: {', '.join(skill['name'] for skill in user_data.get('skills', []))}
+    Experience: {' | '.join(user_data.get('experience', []))}
+    Education: {' | '.join(user_data.get('education', []))}
+    """
+
+    prompt = (
+        "You are a professional resume writer. Based on the following resume data, write a short, engaging 'About Me' section of 2-3 sentences. "
+        "Focus on the key skills and experience to create a compelling narrative. The tone should be professional but personable.\n\n"
+        f"**Resume Data:**\n{resume_text}\n\n"
+        "**Generated 'About Me' Section:**"
+    )
+
+    try:
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as e:
+        logging.error(f"Gemini API call failed for 'About Me' generation: {e}")
+        return None
+
+
 def tailor_resume_for_job(user_data: dict, job_description: str) -> dict | None:
     """
     Uses Gemini to tailor a resume for a specific job description.

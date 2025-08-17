@@ -179,8 +179,15 @@
         <div class="main-content">
             {% if summary %}
             <div class="section summary">
-                <h2>About Me</h2>
+                <h2>Professional Summary</h2>
                 <p>{{ summary | e }}</p>
+            </div>
+            {% endif %}
+
+            {% if about_me %}
+            <div class="section about-me">
+                <h2>About Me</h2>
+                <p>{{ about_me | e }}</p>
             </div>
             {% endif %}
 

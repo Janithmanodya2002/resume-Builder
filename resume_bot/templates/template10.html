@@ -133,6 +133,13 @@
         </div>
         {% endif %}
 
+        {% if about_me %}
+        <div class="section about-me">
+            <h2>About Me</h2>
+            <p>{{ about_me | e }}</p>
+        </div>
+        {% endif %}
+
         {% if experience %}
         <div class="section experience">
             <h2>Experience</h2>

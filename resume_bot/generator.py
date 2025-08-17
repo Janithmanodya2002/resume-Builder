@@ -2,19 +2,24 @@ import os
 import uuid
 import logging
 import random
+from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML
+
+import gemini_client
 from config import TEMPLATES
 
-def generate_pdf(user_data: dict) -> str | None:
+def generate_pdf(user_data: dict, exclude_template: str = None) -> tuple[str, str] | None:
     """
     Generates a PDF resume from user data and a template.
 
     Args:
         user_data: A dictionary containing all the user's information.
+        exclude_template: The name of a template to exclude from random selection.
 
     Returns:
-        The file path of the generated PDF, or None if an error occurs.
+        A tuple containing the file path of the generated PDF and the template name used,
+        or None if an error occurs.
     """
     try:
         # Get the absolute path of the directory containing this script (resume_bot/)
@@ -26,10 +31,14 @@ def generate_pdf(user_data: dict) -> str | None:
         # 1. Set up Jinja2 environment with a reliable path to the templates directory
         env = Environment(loader=FileSystemLoader(templates_dir))
 
-        # 2. Select a random template from the available options in the config
+        # 2. Select a random template, excluding the one specified
         available_templates = list(TEMPLATES.keys())
+        if exclude_template and exclude_template in available_templates:
+            available_templates.remove(exclude_template)
+
         if not available_templates:
-            raise ValueError("No templates found in the configuration.")
+            # Fallback if all templates were excluded (e.g., only one exists)
+            available_templates = list(TEMPLATES.keys())
 
         template_name = random.choice(available_templates)
         template_path = TEMPLATES[template_name]
@@ -39,10 +48,14 @@ def generate_pdf(user_data: dict) -> str | None:
         template_filename = os.path.basename(template_path)
         template = env.get_template(template_filename)
 
-        # 3. Render the HTML template with user data
+        # 3. Generate 'About Me' text and render the HTML template with user data
+        about_me_text = gemini_client.generate_about_me(user_data)
+        if about_me_text:
+            user_data['about_me'] = about_me_text
+
         # Ensure photo_path is a file URI for local access, which is required by WeasyPrint
         if 'photo_path' in user_data and user_data.get('photo_path') and os.path.exists(user_data['photo_path']):
-            user_data['photo_path'] = f"file://{os.path.abspath(user_data['photo_path'])}"
+            user_data['photo_path'] = Path(os.path.abspath(user_data['photo_path'])).as_uri()
 
         html_out = template.render(user_data)
 
@@ -55,7 +68,7 @@ def generate_pdf(user_data: dict) -> str | None:
         # The base_url should be the templates directory to resolve any relative asset paths
         HTML(string=html_out, base_url=templates_dir).write_pdf(pdf_path)
 
-        return pdf_path
+        return pdf_path, template_name
 
     except Exception as e:
         logging.error(f"Error generating PDF: {e}")

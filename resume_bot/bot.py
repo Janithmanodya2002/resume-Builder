@@ -47,6 +47,7 @@ class States(Enum):
     GETTING_SMART_INPUT = 16
     AWAITING_SMART_APPROVAL = 17
     CHOOSING_INPUT_METHOD = 18
+    AWAITING_REGENERATION = 19
 
 
 # --- START HANDLER ---
@@ -448,24 +449,58 @@ async def handle_tailor_approval(update: Update, context: ContextTypes.DEFAULT_T
     return await generate_and_send_pdf(update, context)
 
 
-async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE, exclude_template: str = None) -> int:
     """Helper function to generate, send, and clean up the PDF."""
     message_sender = update.callback_query.message if update.callback_query else update.message
     await message_sender.reply_text("I'm now generating your resume...")
 
     logger.info(f"Final user data: {context.user_data}")
-    pdf_path = generator.generate_pdf(context.user_data)
 
-    if pdf_path and os.path.exists(pdf_path):
+    # The generator now returns a tuple: (path, template_name)
+    pdf_generation_result = generator.generate_pdf(context.user_data, exclude_template=exclude_template)
+
+    if pdf_generation_result:
+        pdf_path, template_name = pdf_generation_result
+        context.user_data['last_template'] = template_name # Save the used template
+
         await message_sender.reply_document(
             document=open(pdf_path, 'rb'),
             filename=f"{context.user_data.get('name', 'resume')}.pdf",
             caption="Here is your generated resume!"
         )
         os.remove(pdf_path)
+
+        reply_keyboard = [["🎨 Regenerate with New Design", "✅ Finish"]]
+        await message_sender.reply_text(
+            "What would you like to do next?",
+            reply_markup=ReplyKeyboardMarkup(
+                reply_keyboard, one_time_keyboard=True, resize_keyboard=True
+            ),
+        )
+        return States.AWAITING_REGENERATION
+
     else:
         await message_sender.reply_text("Sorry, something went wrong while generating your PDF.")
-        
+        # Clean up and end conversation on failure
+        return await finish_conversation(update, context)
+
+
+async def handle_regeneration_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handles the user's choice to regenerate or finish."""
+    choice = update.message.text
+
+    if "🎨 Regenerate with New Design" in choice:
+        await update.message.reply_text("On it! Generating a new design...", reply_markup=ReplyKeyboardRemove())
+        # Call the generator again, excluding the last template used
+        return await generate_and_send_pdf(update, context, exclude_template=context.user_data.get('last_template'))
+    else:  # "✅ Finish"
+        return await finish_conversation(update, context)
+
+
+async def finish_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Clears user data and ends the conversation."""
+    await update.message.reply_text("Great! Feel free to start over any time with /start.", reply_markup=ReplyKeyboardRemove())
+
     if context.user_data.get('photo_path'):
         local_photo_path = context.user_data['photo_path'].replace('file://', '')
         if os.path.exists(local_photo_path):
@@ -481,7 +516,19 @@ async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancels and ends the conversation."""
-    await update.message.reply_text("Operation cancelled.")
+    await update.message.reply_text("Operation cancelled.", reply_markup=ReplyKeyboardRemove())
+
+    # Perform the same cleanup as finish_conversation
+    if context.user_data.get('photo_path'):
+        local_photo_path = context.user_data['photo_path'].replace('file://', '')
+        if os.path.exists(local_photo_path):
+            try:
+                os.remove(local_photo_path)
+                logger.info(f"Cleaned up photo: {local_photo_path}")
+            except OSError as e:
+                logger.error(f"Error cleaning up photo {local_photo_path}: {e}")
+
+    context.user_data.clear()
     return ConversationHandler.END
 
 
@@ -645,6 +692,9 @@ async def main() -> None:
             ],
             States.AWAITING_SMART_APPROVAL: [
                 MessageHandler(filters.Regex("^(✅ Looks Good!|✍️ Edit Manually)$"), handle_smart_approval)
+            ],
+            States.AWAITING_REGENERATION: [
+                MessageHandler(filters.Regex("^(🎨 Regenerate with New Design|✅ Finish)$"), handle_regeneration_choice)
             ],
         },
         fallbacks=[
