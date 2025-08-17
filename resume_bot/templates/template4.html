@@ -4,64 +4,83 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Resume</title>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap');
         @page {
             size: A4;
-            margin: 20mm;
+            margin: 0;
         }
         body {
-            font-family: 'Open Sans', sans-serif;
+            font-family: 'Source Sans Pro', sans-serif;
             line-height: 1.6;
             color: #333;
-            background-color: #fff;
+            background: #fff;
         }
         .container {
-            width: 100%;
+            width: 210mm;
+            min-height: 297mm;
             box-sizing: border-box;
+            padding: 35px;
         }
         .header {
-            text-align: center;
-            border-bottom: 2px solid {{ accent_color | default('#3498db') }};
-            padding-bottom: 20px;
+            display: flex;
+            align-items: center;
             margin-bottom: 30px;
-            position: relative;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 30px;
         }
         .profile-img {
-            width: 100px;
-            height: 100px;
+            width: 120px;
+            height: 120px;
             border-radius: 50%;
             object-fit: cover;
-            position: absolute;
-            top: 0;
-            right: 0;
+            margin-right: 30px;
+        }
+        .header-text {
+            flex-grow: 1;
         }
         .name {
-            font-size: 2.5em;
+            font-size: 2.8em;
+            font-weight: 700;
+            margin: 0 0 5px 0;
+            color: {{ accent_color | default('#2c3e50') }};
+        }
+        .occupation {
+            font-size: 1.3em;
             font-weight: 600;
+            color: #555;
             margin: 0;
-            color: #2c3e50;
         }
         .contact-info {
-            margin-top: 10px;
-            font-size: 0.9em;
-            color: #555;
+            margin-top: 15px;
+            display: flex;
+            gap: 25px;
+            font-size: 0.95em;
         }
         .contact-info span {
-            margin: 0 10px;
+            display: flex;
+            align-items: center;
         }
-        h2 {
-            font-size: 1.4em;
-            color: {{ accent_color | default('#3498db') }};
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-top: 30px;
-            margin-bottom: 15px;
-            padding-bottom: 5px;
-            border-bottom: 1px solid #eee;
+        .contact-info i {
+            color: {{ accent_color | default('#2c3e50') }};
+            margin-right: 8px;
         }
         .section {
+            margin-bottom: 25px;
+        }
+        .section h2 {
+            font-size: 1.4em;
+            color: {{ accent_color | default('#2c3e50') }};
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 2px solid {{ accent_color | default('#2c3e50') }};
+            padding-bottom: 8px;
             margin-bottom: 20px;
+        }
+        .summary p {
+            font-size: 1.05em;
+            color: #555;
         }
         .skills ul {
             list-style-type: none;
@@ -72,36 +91,39 @@
             gap: 10px;
         }
         .skills li {
-            background-color: #f2f2f2;
-            padding: 5px 15px;
-            border-radius: 5px;
+            background-color: #f0f0f0;
+            border-left: 3px solid {{ accent_color | default('#2c3e50') }};
+            padding: 8px 15px;
+            font-size: 0.95em;
         }
         .experience-item, .education-item {
-            margin-bottom: 20px;
+            margin-bottom: 25px;
         }
-        .experience-item h3, .education-item h3 {
-            margin: 0;
-            font-size: 1.1em;
-            font-weight: 600;
-        }
-        .experience-item .header, .education-item .header {
+        .item-header {
             display: flex;
             justify-content: space-between;
             align-items: baseline;
-            margin-bottom: 5px;
+            margin-bottom: 2px;
         }
-        .experience-item .company, .education-item .university {
+        .experience-item h3, .education-item h3 {
+            margin: 0;
+            font-size: 1.2em;
             font-weight: 600;
-            color: #555;
         }
         .experience-item .date, .education-item .date {
             font-style: italic;
             color: #777;
             font-size: 0.9em;
         }
+        .experience-item .company, .education-item .university {
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 8px;
+        }
         .experience-item ul {
             padding-left: 20px;
             margin-top: 5px;
+            color: #444;
         }
     </style>
 </head>
@@ -111,9 +133,13 @@
             {% if photo_path %}
             <img src="{{ photo_path }}" alt="Profile Photo" class="profile-img">
             {% endif %}
-            <h1 class="name">{{ name | e }}</h1>
-            <div class="contact-info">
-                <span>{{ email | e }}</span> | <span>{{ phone | e }}</span>
+            <div class="header-text">
+                <h1 class="name">{{ name | e }}</h1>
+                <h2 class="occupation">{{ occupation | default('Professional') }}</h2>
+                <div class="contact-info">
+                    <span><i class="fas fa-envelope"></i>{{ email | e }}</span>
+                    <span><i class="fas fa-phone"></i>{{ phone | e }}</span>
+                </div>
             </div>
         </div>
 
@@ -124,28 +150,17 @@
         </div>
         {% endif %}
 
-        {% if skills %}
-        <div class="section skills">
-            <h2>Skills</h2>
-            <ul>
-                {% for skill in skills %}
-                <li>{{ skill.name | e }}</li>
-                {% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-
         {% if experience %}
         <div class="section experience">
             <h2>Work Experience</h2>
             {% for exp in experience %}
             {% set parts = exp.split(',') %}
             <div class="experience-item">
-                <div class="header">
+                <div class="item-header">
                     <h3>{{ parts[0] | e }}</h3>
                     <span class="date">{{ parts[2] | default('', true) | e }}</span>
                 </div>
-                <span class="company">{{ parts[1] | default('', true) | e }}</span>
+                <div class="company">{{ parts[1] | default('', true) | e }}</div>
                 <ul>
                     <li>{{ parts[3] | default('', true) | e }}</li>
                 </ul>
@@ -160,13 +175,24 @@
             {% for edu in education %}
             {% set parts = edu.split(',') %}
             <div class="education-item">
-                <div class="header">
+                <div class="item-header">
                     <h3>{{ parts[0] | e }}</h3>
                     <span class="date">{{ parts[2] | default('', true) | e }}</span>
                 </div>
-                <span class="university">{{ parts[1] | default('', true) | e }}</span>
+                <div class="university">{{ parts[1] | default('', true) | e }}</div>
             </div>
             {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if skills %}
+        <div class="section skills">
+            <h2>Skills</h2>
+            <ul>
+                {% for skill in skills %}
+                <li>{{ skill.name | e }}</li>
+                {% endfor %}
+            </ul>
         </div>
         {% endif %}
     </div>

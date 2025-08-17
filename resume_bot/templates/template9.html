@@ -4,91 +4,113 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Resume</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@700&family=Nunito:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Roboto+Slab:wght@400&display=swap');
         @page {
             size: A4;
             margin: 0;
         }
         body {
-            font-family: 'Roboto Slab', serif;
+            font-family: 'Nunito', sans-serif;
             line-height: 1.6;
-            color: #4a4a4a;
+            color: #454545;
+            background: #fdfdfd;
         }
         .container {
+            display: grid;
+            grid-template-columns: 35% 65%;
             width: 210mm;
             height: 297mm;
-            display: grid;
-            grid-template-columns: 1fr 2fr;
-            grid-template-rows: auto 1fr;
-        }
-        .header {
-            grid-column: 1 / -1;
-            background-color: #f7f1e3;
-            padding: 30px;
-            text-align: center;
-        }
-        .name {
-            font-family: 'Playfair Display', serif;
-            font-size: 3em;
-            margin: 0;
-            color: {{ accent_color | default('#d35400') }};
-        }
-        .contact-info {
-            font-size: 0.9em;
-            margin-top: 10px;
         }
         .sidebar {
-            background-color: #f7f1e3;
-            padding: 0 30px 30px 30px;
+            background-color: #f3f0eb;
+            padding: 30px;
+            box-sizing: border-box;
         }
         .main-content {
             padding: 30px;
+            box-sizing: border-box;
+            overflow-y: auto;
         }
         .profile-img {
-            width: 120px;
-            height: 120px;
+            width: 140px;
+            height: 140px;
             border-radius: 50%;
             object-fit: cover;
-            margin: -80px auto 20px;
+            margin: 0 auto 20px;
             display: block;
-            border: 6px solid #fff;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.15);
         }
-        h2 {
-            font-family: 'Playfair Display', serif;
-            font-size: 1.3em;
-            color: {{ accent_color | default('#d35400') }};
-            margin-top: 20px;
-            margin-bottom: 15px;
+        .name {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 2.8em;
+            text-align: center;
+            margin-bottom: 5px;
+            color: {{ accent_color | default('#8b4513') }};
+        }
+        .occupation {
+            font-size: 1.1em;
+            text-align: center;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #777;
+        }
+        .sidebar-section {
+            margin-bottom: 25px;
         }
         .sidebar h2 {
-            text-align: right;
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.4em;
+            color: {{ accent_color | default('#8b4513') }};
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+            margin-bottom: 15px;
         }
-        .section {
-            margin-bottom: 20px;
+        .contact-info p {
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+            font-size: 0.9em;
+        }
+        .contact-info i {
+            margin-right: 10px;
+            width: 16px;
         }
         .skills ul {
             list-style-type: none;
             padding: 0;
-            text-align: right;
         }
-        .experience-item, .education-item {
+        .skills li {
+            margin-bottom: 5px;
+        }
+        .main-content h2 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.8em;
+            color: #333;
             margin-bottom: 20px;
         }
+        .experience-item, .education-item {
+            margin-bottom: 25px;
+        }
         .experience-item h3, .education-item h3 {
+            font-family: 'Nunito', sans-serif;
+            font-weight: 600;
             margin: 0;
-            font-size: 1.1em;
-            font-family: 'Playfair Display', serif;
+            font-size: 1.2em;
+        }
+        .experience-item .meta, .education-item .meta {
+            margin: 3px 0 8px;
+            font-size: 0.9em;
         }
         .experience-item .company, .education-item .university {
             font-weight: 600;
-            color: #666;
+            color: #555;
         }
         .experience-item .date, .education-item .date {
             font-style: italic;
-            color: #888;
-            font-size: 0.9em;
+            color: #777;
+            margin-left: 10px;
         }
         .experience-item ul {
             padding-left: 20px;
@@ -98,17 +120,19 @@
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1 class="name">{{ name | e }}</h1>
-            <div class="contact-info">
-                <span>{{ email | e }} | {{ phone | e }}</span>
-            </div>
-        </div>
         <div class="sidebar">
             {% if photo_path %}
             <img src="{{ photo_path }}" alt="Profile Photo" class="profile-img">
             {% endif %}
-            <div class="section skills">
+
+            <div class="sidebar-section contact-info">
+                <h2>Contact</h2>
+                <p><i class="fas fa-envelope"></i><span>{{ email | e }}</span></p>
+                <p><i class="fas fa-phone"></i><span>{{ phone | e }}</span></p>
+            </div>
+
+            {% if skills %}
+            <div class="sidebar-section skills">
                 <h2>Skills</h2>
                 <ul>
                     {% for skill in skills %}
@@ -116,11 +140,17 @@
                     {% endfor %}
                 </ul>
             </div>
+            {% endif %}
         </div>
         <div class="main-content">
+            <div class="header">
+                <h1 class="name">{{ name | e }}</h1>
+                <h2 class="occupation">{{ occupation | default('Professional') }}</h2>
+            </div>
+
             {% if summary %}
             <div class="section summary">
-                <h2>Profile</h2>
+                <h2>Summary</h2>
                 <p>{{ summary | e }}</p>
             </div>
             {% endif %}
@@ -132,8 +162,8 @@
                 {% set parts = exp.split(',') %}
                 <div class="experience-item">
                     <h3>{{ parts[0] | e }}</h3>
-                    <div>
-                        <span class="company">{{ parts[1] | default('', true) | e }}</span> -
+                    <div class="meta">
+                        <span class="company">{{ parts[1] | default('', true) | e }}</span>
                         <span class="date">{{ parts[2] | default('', true) | e }}</span>
                     </div>
                     <ul>
@@ -151,8 +181,8 @@
                 {% set parts = edu.split(',') %}
                 <div class="education-item">
                     <h3>{{ parts[0] | e }}</h3>
-                    <div>
-                        <span class="university">{{ parts[1] | default('', true) | e }}</span> -
+                    <div class="meta">
+                        <span class="university">{{ parts[1] | default('', true) | e }}</span>
                         <span class="date">{{ parts[2] | default('', true) | e }}</span>
                     </div>
                 </div>

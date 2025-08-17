@@ -164,8 +164,9 @@ def parse_resume_data(text: str) -> dict | None:
     prompt = (
         "You are an expert data extraction assistant. From the following text, extract the user's name, email, phone number, "
         "a professional summary, a list of skills (with a proficiency rating from 1-5 if available, otherwise default to 3), "
-        "and a list of work experiences. Return the data as a JSON object with the following keys: 'name', 'email', 'phone', "
-        "'summary', 'skills' (as a list of objects with 'name' and 'rating' keys), and 'experience' (as a list of strings).\n\n"
+        "a list of work experiences, and a list of education entries. Return the data as a JSON object with the following keys: "
+        "'name', 'email', 'phone', 'summary', 'skills' (as a list of objects with 'name' and 'rating' keys), "
+        "'experience' (as a list of strings), and 'education' (as a list of strings).\n\n"
         "If a piece of information is not available, set its value to null.\n\n"
         f"Text to parse:\n---\n{text}\n---"
     )
