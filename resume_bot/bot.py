@@ -1,7 +1,7 @@
 import logging
 from enum import Enum
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -11,6 +11,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+
 
 import config
 
@@ -42,57 +43,67 @@ class States(Enum):
     GENERATING_PDF = 14
 
 
+# --- START HANDLER ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Starts the conversation and asks for the template."""
-    keyboard = [
-        [
-            InlineKeyboardButton("Modern", callback_data="modern"),
-            InlineKeyboardButton("Creative", callback_data="creative"),
-        ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    """Starts the conversation and asks for the template using reply keyboard."""
+    reply_keyboard = [["Modern", "Creative"]]
+
     await update.message.reply_text(
         "Welcome to the Resume Bot! Let's create your resume.\n\n"
-        "First, choose a template:",
-        reply_markup=reply_markup,
+        "Please choose a template:",
+        reply_markup=ReplyKeyboardMarkup(
+            reply_keyboard, one_time_keyboard=True, resize_keyboard=True
+        ),
     )
     return States.SELECTING_TEMPLATE
 
 
+# --- TEMPLATE SELECTION ---
 async def select_template(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the selected template and asks for an accent color."""
-    query = update.callback_query
-    await query.answer()
-    context.user_data["template"] = query.data
+    template_name = update.message.text.strip().lower()
+    if template_name not in ["modern", "creative"]:
+        await update.message.reply_text(
+            "Invalid choice. Please type 'Modern' or 'Creative'."
+        )
+        return States.SELECTING_TEMPLATE
 
-    keyboard = [
-        [
-            InlineKeyboardButton("Blue", callback_data="#3498db"),
-            InlineKeyboardButton("Green", callback_data="#2ecc71"),
-        ],
-        [
-            InlineKeyboardButton("Red", callback_data="#e74c3c"),
-            InlineKeyboardButton("Purple", callback_data="#8e44ad"),
-        ],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    context.user_data["template"] = template_name
+    reply_keyboard = [["Blue", "Green"], ["Red", "Purple"]]
 
-    await query.edit_message_text(
-        text=f"You selected the {query.data} template. Now, pick an accent color:",
-        reply_markup=reply_markup,
+    await update.message.reply_text(
+        f"You selected the '{template_name}' template. Now, pick an accent color:",
+        reply_markup=ReplyKeyboardMarkup(
+            reply_keyboard, one_time_keyboard=True, resize_keyboard=True
+        ),
     )
     return States.SELECTING_COLOR
 
 
+# --- COLOR SELECTION ---
 async def select_color(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the selected color and asks for a photo."""
-    query = update.callback_query
-    await query.answer()
-    context.user_data["accent_color"] = query.data
+    color_map = {
+        "Blue": "#3498db",
+        "Green": "#2ecc71",
+        "Red": "#e74c3c",
+        "Purple": "#8e44ad",
+    }
 
-    await query.edit_message_text(
-        text=f"Great! You've chosen the {context.user_data['template']} template with your chosen accent color.\n\n"
-             "Now, please upload a profile photo for your resume."
+    color_choice = update.message.text.strip().capitalize()
+    if color_choice not in color_map:
+        await update.message.reply_text(
+            "Invalid choice. Please select from Blue, Green, Red, or Purple."
+        )
+        return States.SELECTING_COLOR
+
+    context.user_data["accent_color"] = color_map[color_choice]
+
+    await update.message.reply_text(
+        f"Great! You've chosen the {context.user_data['template']} template "
+        f"with {color_choice} as the accent color.\n\n"
+        "Now, please upload a profile photo for your resume.",
+        reply_markup=ReplyKeyboardRemove(),  # Remove the keyboard so user can upload photo
     )
     return States.UPLOADING_PHOTO
 
@@ -100,17 +111,17 @@ async def select_color(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the photo and asks for the name."""
     photo_file = await update.message.photo[-1].get_file()
-
+    
     # Create a temporary directory for the user's session
     user_id = update.message.from_user.id
     temp_dir = f"/tmp/resume_bot/{user_id}"
     os.makedirs(temp_dir, exist_ok=True)
-
+    
     file_path = os.path.join(temp_dir, "profile_photo.jpg")
     await photo_file.download_to_drive(file_path)
-
+    
     context.user_data["photo_path"] = file_path
-
+    
     await update.message.reply_text(
         "Photo received! Now, what is your full name?"
     )
@@ -150,21 +161,21 @@ async def get_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     """Stores the summary, gets AI enhancement, and asks for approval."""
     original_summary = update.message.text
     context.user_data["original_summary"] = original_summary
-
+    
     await update.message.reply_text("Thanks. I'm now using AI to enhance your summary...")
-
+    
     template_style = context.user_data.get("template", "modern")
     enhanced_summary = gemini_client.enhance_summary(original_summary, template_style=template_style)
-
+    
     if enhanced_summary:
         context.user_data["enhanced_summary"] = enhanced_summary
-
+        
         keyboard = [
             [InlineKeyboardButton("✅ Use AI Version", callback_data="use_ai_summary")],
             [InlineKeyboardButton("✍️ Keep My Version", callback_data="use_original_summary")],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-
+        
         await update.message.reply_text(
             "Here is the AI-enhanced version of your summary:\n\n"
             f"**AI Version:**\n_{enhanced_summary}_\n\n"
@@ -188,14 +199,14 @@ async def handle_summary_approval(update: Update, context: ContextTypes.DEFAULT_
     """Handles the user's choice for the summary and asks for skills."""
     query = update.callback_query
     await query.answer()
-
+    
     if query.data == "use_ai_summary":
         context.user_data["summary"] = context.user_data["enhanced_summary"]
         await query.edit_message_text("Great, I've saved the AI-enhanced summary.")
     else:
         context.user_data["summary"] = context.user_data["original_summary"]
         await query.edit_message_text("Okay, I've saved your original summary.")
-
+        
     return await start_getting_skills(update, context)
 
 
@@ -238,7 +249,7 @@ async def skills_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         "Skills section complete! Now, let's add your work experience.",
         reply_markup=ReplyKeyboardRemove(),
     )
-
+    
     reply_keyboard = [["Done"]]
     await update.message.reply_text(
         "Please enter one job at a time using this format:\n"
@@ -312,7 +323,7 @@ async def education_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         "All information collected!",
         reply_markup=ReplyKeyboardRemove(),
     )
-
+    
     keyboard = [
         [
             InlineKeyboardButton("✅ Yes, please!", callback_data="tailor_yes"),
@@ -350,7 +361,7 @@ async def get_job_description(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if tailoring_suggestions:
         context.user_data["tailored_summary"] = tailoring_suggestions["tailored_summary"]
-
+        
         keyboard = [
             [InlineKeyboardButton("✅ Apply Changes", callback_data="apply_tailoring")],
             [InlineKeyboardButton("❌ Keep Original", callback_data="reject_tailoring")],
@@ -384,7 +395,7 @@ async def handle_tailor_approval(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text("Okay, I've updated your summary.")
     else:
         await query.edit_message_text("No problem. I'll use your original summary.")
-
+    
     return await generate_and_send_pdf(update, context)
 
 
@@ -405,7 +416,7 @@ async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TY
         os.remove(pdf_path)
     else:
         await message_sender.reply_text("Sorry, something went wrong while generating your PDF.")
-
+        
     if 'photo_path' in context.user_data:
         local_photo_path = context.user_data['photo_path'].replace('file://', '')
         if os.path.exists(local_photo_path):
@@ -427,13 +438,22 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def invalid_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles any input that is not appropriate for the current state."""
-    current_state = context.user_data.get('state') # I need to store the state first
-    # A simple fallback message for now. A more advanced version could check the state.
     await update.message.reply_text(
         "Sorry, I was expecting different input. Please follow the instructions or type /cancel to start over."
     )
     # This does not change the state
     return
+
+
+async def fallback_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Catches any button clicks that don't match a state."""
+    query = update.callback_query
+    await query.answer()
+    logger.warning(f"Fallback callback handler triggered for data: {query.data}")
+    await query.edit_message_text(
+        "Something went wrong! This button is not active. Please type /start to begin again."
+    )
+    return ConversationHandler.END
 
 
 def main() -> None:
@@ -444,10 +464,10 @@ def main() -> None:
         entry_points=[CommandHandler("start", start)],
         states={
             States.SELECTING_TEMPLATE: [
-                CallbackQueryHandler(select_template)
+                MessageHandler(filters.Regex("^(?i)(modern|creative)$"), select_template),
             ],
             States.SELECTING_COLOR: [
-                CallbackQueryHandler(select_color)
+                MessageHandler(filters.Regex("^(?i)(blue|green|red|purple)$"), select_color),
             ],
             States.UPLOADING_PHOTO: [
                 MessageHandler(filters.PHOTO, handle_photo)
@@ -491,7 +511,7 @@ def main() -> None:
             CommandHandler("cancel", cancel),
             MessageHandler(filters.TEXT & ~filters.COMMAND, invalid_input),
         ],
-    )
+)
 
     application.add_handler(conv_handler)
 
